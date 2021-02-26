@@ -1,0 +1,17 @@
+# Switch the CPU from ARMv7 into ARMv8 (aarch64) mode
+arm_64bit=1
+
+enable_uart=1
+upstream_kernel=1
+
+kernel=slota/vmlinuz
+# For details on the initramfs directive, see
+# https://www.raspberrypi.org/forums/viewtopic.php?f=63&t=10532
+initramfs slota/initrd.img followkernel
+
+disable_overscan=1
+
+# GPU memory size for each total memory size
+gpu_mem_256=100
+gpu_mem_512=100
+gpu_mem_1024=100

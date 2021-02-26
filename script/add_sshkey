@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import sys, os, shutil, stat
+
+if len(sys.argv) != 3:
+    print('Usage: %s rootfsdir from_dot_ssh_dir' % sys.argv[0])
+    sys.exit(99)
+
+rootfs = sys.argv[1]
+sshdir = sys.argv[2]
+authorized_keys = os.path.join(rootfs, 'root', '.ssh', 'authorized_keys')
+
+#ed25519 is probably best, but rsa is more widespread. If the user has an ed25519 key,
+#they presumably want to use it. Don't support DSA because it is dangerous.
+keyfiles = ('id_ed25519.pub', 'id_rsa.pub')
+keyfiles = [ os.path.expanduser(os.path.join(sshdir, x)) for x in keyfiles ]
+
+for key in keyfiles:
+    if os.path.exists(key):
+        os.makedirs(os.path.dirname(authorized_keys), exist_ok=True)
+        shutil.copy(key, authorized_keys)
+        os.chmod(authorized_keys, stat.S_IRUSR | stat.S_IWUSR)
+        sys.exit(0)

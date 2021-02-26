@@ -1,0 +1,77 @@
+#!/bin/sh
+
+# Mount the necessary filesystems.
+# We need /proc to mount anything, /dev to mount /boot,
+# and /boot for the new root image.
+mount proc /proc -t proc -o nosuid,noexec,nodev
+mount devtmpfs /dev -t devtmpfs -o nosuid,noexec
+
+# Reopen stdin/out/err now that we have a real /dev
+exec 0</dev/console
+exec 1>/dev/console
+exec 2>/dev/console
+
+insmod /mods/fixed.ko
+insmod /mods/gpio-regulator.ko
+insmod /mods/sdhci.ko
+insmod /mods/sdhci-pltfm.ko
+insmod /mods/sdhci-iproc.ko
+insmod /mods/nls_ascii.ko
+insmod /mods/nls_cp437.ko
+insmod /mods/fat.ko
+insmod /mods/vfat.ko
+insmod /mods/loop.ko
+insmod /mods/squashfs.ko
+
+# Wait a little for devices to appear.
+sleep 2
+
+ROOTSQFS=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2-`
+
+#Try all partitions until one has a rootfs squashfs.
+for i in `egrep -o ' (mmcblk[0-9]+p[0-9]+|[sh]d[a-z]+[0-9]+)$' /proc/partitions`; do
+    #XXX Maybe check that it is fat/vfat/exfat before trying to mount?
+    if ! mount /dev/$i /boot -o ro; then
+        continue
+    fi
+    if [ -f $ROOTSQFS ]; then
+        break
+    fi
+    umount /boot
+done
+if ! [ -f $ROOTSQFS ]; then
+    echo "FAILED TO MOUNT /boot" >&2
+    # drop into shell
+    setsid -c /bin/sh -l
+    exit 99
+fi
+
+echo XXX4
+setsid -c /bin/sh -l
+
+# Switch to the real root.
+mount -tsquashfs -oro $ROOTSQFS /newroot
+
+# XXX debugging: mount a writable overlay on top of /
+#insmod /mods/overlay.ko
+#mount -ttmpfs tmpfs -osize=128M /boot/overlay
+#mkdir /boot/overlay/root
+#mkdir /boot/overlay/work
+#mount -toverlay overlay \
+#      -olowerdir=/newroot \
+#      -oupperdir=/boot/overlay/root \
+#      -oworkdir=/boot/overlay/work \
+#      /newroot
+
+# Move existing mounts to the new root.
+mount --move /proc /newroot/proc
+mount --move /dev /newroot/dev
+mount --move /boot /newroot/boot
+# XXX debugging: leave old root visible under the new root
+#mount --bind / /newroot/mnt
+
+# Mount sys
+mount sysfs /sys -t sysfs -o nosuid,noexec,nodev
+
+echo "initrd finished, switching roots"
+exec switch_root /newroot XXXCMDXXX
