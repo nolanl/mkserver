@@ -7,7 +7,11 @@ Primarily intended for read-only rootfs images, it supports building simple imag
 Dockerfiles to use as a base are available in docker/.
 
 To generate a new image, use:
+```
 $ podman/docker save mycontainer | mkserver --make-bootable /path/to/mounted/sdcard
+```
 
 To test an image locally using qemu:
+```
 $ mkserver --run /path/to/imagedir
+```
