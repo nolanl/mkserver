@@ -4,10 +4,10 @@ arm_64bit=1
 enable_uart=1
 upstream_kernel=1
 
-kernel=slota/vmlinuz
+kernel=slota/vmlinuz-$kernelver
 # For details on the initramfs directive, see
 # https://www.raspberrypi.org/forums/viewtopic.php?f=63&t=10532
-initramfs slota/initrd.img followkernel
+initramfs slota/initrd.img-$kernelver followkernel
 
 disable_overscan=1
 

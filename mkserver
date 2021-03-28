@@ -1,203 +1,157 @@
 #!/usr/bin/env python3
-import sh, argparse, sys, os, secrets, shutil, glob, contextlib, urllib, tarfile
-from io import StringIO
-import urllib.request
+import argparse, sys, os, shutil, glob, contextlib, tempfile, socket, stat, secrets
+from string import Template
 
-pi_firmware_url='http://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210111+ds-2_arm64.deb'
+import util
+from deb import extract_files_from_deb_url
+from initramfs import Initramfs
+from layers import ContainerStream, dict_to_layer
 
-for i in ('docker', 'xorriso', 'fakeroot', 'mksquashfs'):
+#XXX Cache these somewhere? ~/.cache/mkserver?
+#XXX Check sha256sums of these.
+pi_firmware_url='https://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210111+ds-2_arm64.deb'
+busybox_url='https://deb.debian.org/debian/pool/main/b/busybox/busybox-static_1.30.1-6+b1_%s.deb'
+
+mods = [
+    'kernel/drivers/regulator/gpio-regulator.ko',
+    'kernel/drivers/regulator/fixed.ko',
+    'kernel/drivers/mmc/host/sdhci.ko',
+    'kernel/drivers/mmc/host/sdhci-pltfm.ko',
+    'kernel/drivers/mmc/host/sdhci-iproc.ko',
+    'kernel/drivers/mmc/host/bcm2835.ko',
+    'kernel/fs/nls/nls_ascii.ko',
+    'kernel/fs/nls/nls_cp437.ko',
+    'kernel/fs/fat/fat.ko',
+    'kernel/fs/fat/vfat.ko',
+    'kernel/drivers/block/loop.ko',
+    'kernel/fs/squashfs/squashfs.ko',
+    'kernel/fs/overlayfs/overlay.ko'
+]
+
+scriptroot = os.path.dirname(__file__)
+datadir = os.path.join(scriptroot, 'data')
+
+for i in ('xorriso', 'tar2sqfs'):
     if shutil.which(i) is None:
         print('%s is required, but not installed' % i)
         sys.exit(99)
 
-#XXX Support supplying your own kernel
-#XXX Error out early if --make-bootable directory is not empty
-#XXX Support docker's CMD? Or just leave it hardcoded as /sbin/init?
-
-parser = argparse.ArgumentParser(description='Build a server bootdir from a container.')
-parser.add_argument('image', help='docker image to use as the rootfs')
-parser.add_argument('hostname', help='hostname of the server')
-parser.add_argument('domain', help='domain name of the server')
-parser.add_argument('--no-clean', help='don\'t clean up temporary files/directories', action='store_true')
+parser = argparse.ArgumentParser(description='Build a server bootdir from a container image.')
+parser.add_argument('--hostname', help='hostname of the server')
+parser.add_argument('--domain', help='domain name of the server')
 parser.add_argument('--no-sshkey', help='don\'t install an ssh auth key for the root user',
                     action='store_true')
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--make-bootable', help='make a bootable starter image in the given directory',
                     type=str)
 group.add_argument('--upgrade', help='install the image on an existing server', type=str)
-#XXX Implement --install
 
 args = parser.parse_args()
-image = args.image
-hostname = args.hostname
-domain = args.domain
-
-scriptroot = os.path.dirname(__file__)
-if scriptroot.endswith('/.'):
-    #keep from accidentally clobbering stuff in the mkserver repo.
-    print("You probably didn't mean to run this here.")
-    sys.exit(98)
 
 if args.make_bootable:
+    bootdir = args.make_bootable
+    slotdir = os.path.join(bootdir, 'slota')
     with contextlib.suppress(FileNotFoundError):
-        if len(os.listdir(args.make_bootable)) != 0:
+        if len(os.listdir(bootdir)) != 0:
             print("make-bootable output directory isn't empty!")
             sys.exit(97)
-        if not os.access(args.make_bootable, os.W_OK | os.X_OK):
-            print("make-bootable output directory isn't empty!")
+        if not os.access(bootdir, os.W_OK | os.X_OK):
+            print("make-bootable output directory isn't writable!")
             sys.exit(96)
-
-rootfs = 'rootfs'
-initramfs = 'initramfs'
-bootslot = 'bootslot'
-
-rfakeroot = sh.fakeroot.bake('-i', rootfs + '.db', '-s', rootfs + '.db')
-ifakeroot = sh.fakeroot.bake('-i', initramfs + '.db', '-s', initramfs + '.db')
-for i in (rootfs, initramfs):
-    with contextlib.suppress(FileNotFoundError):
-        os.unlink(i + '.db')
-    sh.fakeroot('-s', i + '.db', 'true') #Precreate fakeroot databases
-
-#Find architecture of rootfs image.
-buf = StringIO()
-sh.docker('image', 'inspect', '-f', '{{.Architecture}}', image, _out=buf)
-arch = buf.getvalue().strip()
-assert(arch in ('amd64', 'arm64'))
-from_prefix = '' if arch == 'amd64' else 'arm64v8/'
-
-print(f'Building server for {arch} from {image}')
-
-#Create temporary container from rootfs image
-rcname = 'mkserver_%s' % secrets.token_urlsafe(10).lower()
-sh.docker('create', '--name', rcname, image)
-
-#Extract rootfs container contents
-shutil.rmtree(rootfs, ignore_errors=True)
-os.mkdir(rootfs)
-rfakeroot.tar(sh.docker('export', rcname, _piped=True), 'xp', '-C', rootfs)
-#XXX Check that kernel is installed.
-
-#Delete container
-sh.docker('rm', rcname)
-
-#Copy out kernel/System.map/config/dtbs/etc, then finalize rootfs
-shutil.rmtree(bootslot, ignore_errors=True)
-shutil.copytree(os.path.join(rootfs, 'boot'), bootslot,
-                ignore=shutil.ignore_patterns('initrd*'))
-kernelver = glob.glob(os.path.join(bootslot, 'vmlinuz-*'))[0]
-kernelver = os.path.split(kernelver)[-1][len('vmlinuz-'):]
-os.rename(os.path.join(bootslot, 'vmlinuz-%s' % kernelver), os.path.join(bootslot, 'vmlinuz'))
-shutil.rmtree(os.path.join(rootfs, 'boot')) #remade in fixroot.
-shutil.copytree(os.path.join(rootfs, 'usr', 'lib', 'linux-image-%s' % kernelver, 'broadcom'),
-                bootslot, dirs_exist_ok=True) #dtbs
-
-if not args.no_sshkey:
-    rfakeroot(os.path.join(scriptroot, 'script', 'add_sshkey'), rootfs, '~/.ssh')
-
-rfakeroot(os.path.join(scriptroot, 'script', 'fixroot'), rootfs, hostname, domain)
-
-#squashfsize rootfs
-#XXX xz for fast CPUs, lzo (or default gzip) for slow?
-rootfs_sqfs = os.path.join(bootslot, 'rootfs.sqfs')
-with contextlib.suppress(FileNotFoundError):
-    os.unlink(rootfs_sqfs)
-rfakeroot.mksquashfs(rootfs, rootfs_sqfs, '-noappend')
-
-#docker build initramfs
-#XXX handle Entrypoint too?
-buf = StringIO()
-sh.docker('inspect', '-f', '{{.Config.Cmd}}', image, _out=buf)
-cmd = buf.getvalue().strip()[1:-1]
-icname = 'mkserver_i_%s' % secrets.token_urlsafe(10).lower()
-sh.docker('build', '--build-arg', f'FROM_PREFIX={from_prefix}',
-          '--build-arg', f'ICMD={cmd}',
-          '-t', icname, os.path.join(scriptroot, 'docker', 'initramfs'))
-
-#Create temporary container for initramfs
-sh.docker('create', '--name', icname, icname)
-
-#Extract initramfs contents
-shutil.rmtree(initramfs, ignore_errors=True)
-os.mkdir(initramfs)
-ifakeroot.tar(sh.docker('export', icname, _piped=True), 'xp', '-C', initramfs)
-
-#Delete container/image
-sh.docker('rm', icname)
-sh.docker('rmi', icname)
-
-#Inject mmc/fs modules from rootfs into initramfs
-mods = os.path.join(initramfs, 'mods')
-ifakeroot.mkdir(mods)
-ifakeroot.cp(os.path.join(rootfs, 'lib', 'modules', kernelver,
-                          'kernel', 'drivers', 'regulator', 'gpio-regulator.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver,
-                          'kernel', 'drivers', 'regulator', 'fixed.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver,
-                          'kernel', 'drivers', 'mmc', 'host', 'sdhci.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver,
-                          'kernel', 'drivers', 'mmc', 'host', 'sdhci-pltfm.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver,
-                          'kernel', 'drivers', 'mmc', 'host', 'sdhci-iproc.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'nls', 'nls_ascii.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'nls', 'nls_cp437.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'fat', 'fat.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'fat', 'vfat.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'drivers', 'block', 'loop.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'squashfs', 'squashfs.ko'),
-             os.path.join(rootfs, 'lib', 'modules', kernelver, 'kernel', 'fs', 'overlayfs', 'overlay.ko'),
-             mods)
-
-#gzip/cpio initramfs
-files = [ x[len(initramfs)+1:]+'\n' for x in glob.glob(os.path.join(initramfs, '**'), recursive=True)
-          if len(x) != len(initramfs)+1 ]
-with open(os.path.join(bootslot, 'initrd.img'), 'wb') as f:
-    sh.gzip(ifakeroot.cpio('-D', initramfs, '-o', '-H', 'newc', _in=files, _piped=True),
-            _out=f, _tty_out=False)
-
-def extract_pi_firmware(outdir):
-    with urllib.request.urlopen(pi_firmware_url) as f:
-        assert(f.read(8) == b'!<arch>\n')
-        while True:
-            fname = f.read(16).rstrip()
-            if fname == b'':
-                break
-            f.read(32)
-            flen = int(f.read(10))
-            assert(f.read(2) == b'`\n')
-            if fname == b'data.tar.xz':
-                tar = tarfile.open(fileobj=f, mode="r|*")
-                for ti in tar:
-                    if ti.isfile() and ti.name.startswith('./usr/lib/raspi-firmware/'):
-                        tardata = tar.extractfile(ti)
-                        with open(os.path.join(outdir, os.path.basename(ti.name)), 'wb') as outfile:
-                            shutil.copyfileobj(tardata, outfile)
-                break
-            else:
-                f.read(flen)
-
-if args.make_bootable:
-    outdir = args.make_bootable
-    shutil.copytree(bootslot, os.path.join(outdir, 'slota'))
-    if arch == 'arm64':
-        extract_pi_firmware(outdir)
-        #Copy bootslot .dtb files into outdir
-        for dtb in glob.glob(os.path.join(bootslot, '*.dtb')):
-            shutil.copy(dtb, outdir)
-        for f in ('config.txt', 'cmdline.txt'):
-            shutil.copy(os.path.join(scriptroot, 'data', f), outdir)
-    else:
-        assert(False) #xorriso for amd64.
 elif args.upgrade:
-    #rsync or scp over new slot
-    #copy bootslot dtbs to /boot
-    #adjust config.txt/cmdline.txt
-    assert(False)
+    bootdir = None #XXX?
+    slotdir = None #XXX mktempdir? make user specify dir?
 else:
     assert(False)
+layersdir = os.path.join(bootdir, 'layers')
 
-#delete rootfs/initramfs dirs.
-if not args.no_clean:
-    for i in (rootfs, initramfs, bootslot):
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(i + '.db')
-        shutil.rmtree(i)
+#Extract container image info and layers
+os.mkdir(layersdir)
+os.mkdir(slotdir)
+modtempdir = tempfile.TemporaryDirectory(prefix='mks_mods_')
+putasides = [
+    ('^boot/config-', (slotdir, True)), ('^boot/System.map-', (slotdir, True)),
+    ('^boot/vmlinuz-', (slotdir, True)), ('^boot/initrd.img-', ('', True)),
+    ('^usr/lib/linux-image-[^/]+/broadcom/.+', (slotdir, False)),
+    ('^run/.+', ('', True)),
+]
+for mod in mods:
+    putasides.append(('^lib/modules/[^/]+/%s' % mod, (modtempdir.name, False)))
+
+#XXX Verify that there is a kernel, /boot exists, anything else?
+cs = ContainerStream(sys.stdin.buffer, layersdir, putasides)
+
+with open(os.path.join(slotdir, 'layers'), 'w') as layersfile:
+    for layer in cs.get_layernames():
+        os.makedirs(os.path.join(layersdir, layer), exist_ok=True)
+        print(layer, file=layersfile)
+
+arch = cs.get_architecture()
+
+kernelver = glob.glob(os.path.join(slotdir, 'vmlinuz-*'))[0]
+kernelver = os.path.split(kernelver)[-1][len('vmlinuz-'):]
+
+#Get hostname/domainname
+hostname = args.hostname
+if not hostname:
+    hostname = cs.get_tags()[0].split(':')[0]
+    hostname = hostname.split('/')[1] if '/' in hostname else hostname
+
+domain = args.domain
+if not domain:
+    domain = socket.getfqdn().split('.', 1)[1]
+
+#Make initramfs
+cmd = util.posix_list2cmdline(cs.get_cmdlist())
+initramfs = Initramfs(busybox_url % arch,
+                      os.path.join(datadir, 'init'), cmd)
+initramfs.copyin(glob.glob(os.path.join(modtempdir.name, '*')), 'mods')
+initramfs.write_cpiofile(os.path.join(slotdir, 'initrd.img-%s' % kernelver))
+
+#Generate a finalize/keys/config layer
+with open(os.path.join(datadir, 'hosts'), 'r') as f:
+    hosts = Template(f.read()).substitute(hostname=hostname, domain=domain)
+finalize = {
+    'etc/hostname': (hostname + '\n', stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
+    'etc/hosts': (hosts, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
+    'etc/mtab': ('SYMLINK:/proc/mounts', 0),
+    'etc/machine-id': (secrets.token_hex(16) + '\n', stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
+}
+#XXX Clobber ssh host keys, if present.
+
+if not args.no_sshkey:
+    keyfiles = ('id_ed25519.pub', 'id_rsa.pub')
+    keyfiles = [ os.path.expanduser(os.path.join('~', '.ssh', x)) for x in keyfiles ]
+    authkeys = []
+    for key in keyfiles:
+        if os.path.exists(key):
+            with open(key, 'r') as kf:
+                authkeys.append(kf.read().strip())
+    finalize['root/.ssh/authorized_keys'] = ('\n'.join(authkeys) + '\n', stat.S_IRUSR | stat.S_IWUSR)
+
+finalize_layer = os.path.join(slotdir, 'finalize')
+dict_to_layer(finalize, finalize_layer)
+os.makedirs(finalize_layer, exist_ok=True)
+
+#Finish up. Write whole firmware, or do remote upgrade.
+if args.make_bootable:
+    if arch == 'arm64':
+        extract_files_from_deb_url(pi_firmware_url, '^./usr/lib/raspi-firmware/', bootdir)
+        #Copy bootslot .dtb files into outdir
+        for dtb in glob.glob(os.path.join(slotdir, '*.dtb')):
+            shutil.copy(dtb, bootdir)
+        shutil.copy(os.path.join(datadir, 'cmdline.txt'), bootdir)
+        with (open(os.path.join(datadir, 'config.txt'), 'r') as inf,
+              open(os.path.join(bootdir, 'config.txt'), 'w') as outf):
+             outf.write(Template(inf.read()).substitute(kernelver=kernelver))
+    else:
+        assert(False) #XXX xorriso for amd64.
+elif args.upgrade:
+    #XXX write me.
+    #rsync or scp over new slot/layers
+    #copy bootslot dtbs to /boot
+    #adjust config.txt/cmdline.txt
+    #GC layers dir
+    assert(False)
+
+print('\nBuilt %s.%s for arch %s' % (hostname, domain, arch))
