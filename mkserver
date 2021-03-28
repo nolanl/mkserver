@@ -6,6 +6,7 @@ import util
 from deb import extract_files_from_deb_url
 from initramfs import Initramfs
 from layers import ContainerStream, dict_to_layer
+from qemu import qemu_run
 
 #XXX Cache these somewhere? ~/.cache/mkserver?
 #XXX Check sha256sums of these.
@@ -45,10 +46,14 @@ group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--make-bootable', help='make a bootable starter image in the given directory',
                     type=str)
 group.add_argument('--upgrade', help='install the image on an existing server', type=str)
+group.add_argument('--run', help='run (in emulation) the bootable image in the given directory', type=str)
 
 args = parser.parse_args()
 
-if args.make_bootable:
+if args.run:
+    qemu_run(args.run)
+    assert(False)
+elif args.make_bootable:
     bootdir = args.make_bootable
     slotdir = os.path.join(bootdir, 'slota')
     with contextlib.suppress(FileNotFoundError):
