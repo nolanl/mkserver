@@ -2,7 +2,7 @@
 
 A tool for building bootable images for servers from containers.
 
-Primarily intended for read-only rootfs images, it supports building simple images that run a single program (in the "init=/do_things.sh" sense) or images that run with a proper init (1). The command to run is taking from the container's "Cmd" attribute.
+Primarily intended for read-only rootfs images, it supports building simple images that run a single program (in the "init=/do_things.sh" sense) or images that run with a proper init (1). The command to run is taken from the container's "Cmd" attribute.
 
 Dockerfiles to use as a base are available in docker/.
 
