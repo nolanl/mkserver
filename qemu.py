@@ -15,7 +15,7 @@ def next_power_of_2(n):
         k = k << 1
     return k
 
-def qemu_run(imgdir):
+def qemu_run(imgdir, cmd=None):
     with open(os.path.join(imgdir, 'config.txt'), 'r') as cfgf:
         for l in cfgf.readlines():
             if l.startswith('kernel='):
@@ -26,6 +26,8 @@ def qemu_run(imgdir):
 
     with open(os.path.join(imgdir, 'cmdline.txt'), 'r') as cmdlinef:
         kernel_args = cmdlinef.readlines()[0].strip()
+    if cmd is not None:
+        kernel_args += ' cmd_to_eol=%s' % cmd
 
     #sdcards must be a power of 2, so we figure out the size of the dir, add some slop, then
     # pick the next highest power of 2.

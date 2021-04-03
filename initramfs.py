@@ -1,10 +1,9 @@
 import os, tempfile, shutil, stat, glob, subprocess
-from string import Template
 
 from deb import extract_files_from_deb_url
 
 class Initramfs:
-    def __init__(self, busybox_url, init, initcmd):
+    def __init__(self, busybox_url, init):
         self.tmpdir_obj = tempfile.TemporaryDirectory(prefix='mks_initrd_')
         self.tmpdir = self.tmpdir_obj.name
 
@@ -20,9 +19,7 @@ class Initramfs:
             if cmd != 'busybox':
                 os.link(bbox, os.path.join(self.tmpdir, 'bin', cmd))
 
-        with (open(init, 'r') as inf,
-              open(os.path.join(self.tmpdir, 'init'), 'w') as outf):
-            outf.write(Template(inf.read()).safe_substitute(initcmd=initcmd))
+        shutil.copyfile(init, os.path.join(self.tmpdir, 'init'))
         os.chmod(os.path.join(self.tmpdir, 'init'), stat.S_IRUSR | stat.S_IXUSR)
 
     def copyin(self, files, destdir):

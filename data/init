@@ -79,5 +79,10 @@ mount --move /boot /newroot/boot
 # Mount sys
 mount sysfs /newroot/sys -t sysfs -o nosuid,noexec,nodev
 
-echo "initrd finished, switching roots"
-exec switch_root /newroot $initcmd
+if egrep -q ' cmd_to_eol=.+$' /newroot/proc/cmdline; then
+    CMD=`egrep -o 'cmd_to_eol=.+$' /newroot/proc/cmdline | cut -d'=' -f2-`
+else
+    CMD=`cat /newroot/boot/initcmd.txt`
+fi
+echo "initrd finished, switching roots, cmd: $CMD"
+exec switch_root /newroot /bin/sh -c "exec $CMD"

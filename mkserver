@@ -42,6 +42,8 @@ parser.add_argument('--hostname', help='hostname of the server')
 parser.add_argument('--domain', help='domain name of the server')
 parser.add_argument('--no-sshkey', help='don\'t install an ssh auth key for the root user',
                     action='store_true')
+parser.add_argument('--cmd', type=str,
+                    help='run a different command than the default for this container')
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--make-bootable', help='make a bootable starter image in the given directory',
                     type=str)
@@ -51,7 +53,7 @@ group.add_argument('--run', help='run (in emulation) the bootable image in the g
 args = parser.parse_args()
 
 if args.run:
-    qemu_run(args.run)
+    qemu_run(args.run, args.cmd)
     assert(False)
 elif args.make_bootable:
     bootdir = args.make_bootable
@@ -79,6 +81,7 @@ putasides = [
     ('^boot/vmlinuz-', (slotdir, True)), ('^boot/initrd.img-', ('', True)),
     ('^usr/lib/linux-image-[^/]+/broadcom/.+', (slotdir, False)),
     ('^run/.+', ('', True)),
+    ('^usr/sbin/policy-rc.d', ('', True)), #Debian/Ubuntu container images have this, we remove it.
 ]
 for mod in mods:
     putasides.append(('^lib/modules/[^/]+/%s' % mod, (modtempdir.name, False)))
@@ -107,9 +110,8 @@ if not domain:
     domain = socket.getfqdn().split('.', 1)[1]
 
 #Make initramfs
-cmd = util.posix_list2cmdline(cs.get_cmdlist())
 initramfs = Initramfs(busybox_url % arch,
-                      os.path.join(datadir, 'init'), cmd)
+                      os.path.join(datadir, 'init'))
 initramfs.copyin(glob.glob(os.path.join(modtempdir.name, '*')), 'mods')
 initramfs.write_cpiofile(os.path.join(slotdir, 'initrd.img-%s' % kernelver))
 
@@ -142,13 +144,23 @@ os.makedirs(finalize_layer, exist_ok=True)
 if args.make_bootable:
     if arch == 'arm64':
         extract_files_from_deb_url(pi_firmware_url, '^./usr/lib/raspi-firmware/', bootdir)
+
         #Copy bootslot .dtb files into outdir
         for dtb in glob.glob(os.path.join(slotdir, '*.dtb')):
             shutil.copy(dtb, bootdir)
+
         shutil.copy(os.path.join(datadir, 'cmdline.txt'), bootdir)
+
         with (open(os.path.join(datadir, 'config.txt'), 'r') as inf,
               open(os.path.join(bootdir, 'config.txt'), 'w') as outf):
              outf.write(Template(inf.read()).substitute(kernelver=kernelver))
+
+        if args.cmd:
+            cmd = args.cmd
+        else:
+            cmd = util.posix_list2cmdline(cs.get_cmdlist())
+        with open(os.path.join(bootdir, 'initcmd.txt'), 'w') as f:
+            f.write(cmd)
     else:
         assert(False) #XXX xorriso for amd64.
 elif args.upgrade:
