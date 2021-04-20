@@ -8,6 +8,8 @@ from initramfs import Initramfs
 from layers import ContainerStream, dict_to_layer
 from qemu import qemu_run
 
+#XXX Add a wrapper around podman build.
+
 #XXX Cache these somewhere? ~/.cache/mkserver?
 #XXX Check sha256sums of these.
 pi_firmware_url='https://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210111+ds-2_arm64.deb'
@@ -124,7 +126,7 @@ finalize = {
     'etc/mtab': ('SYMLINK:/proc/mounts', 0),
     'etc/machine-id': (secrets.token_hex(16) + '\n', stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
 }
-#XXX Clobber ssh host keys, if present.
+#XXX Clobber ssh host keys, if present. /var/lib/systemd/random-seed?
 
 if not args.no_sshkey:
     keyfiles = ('id_ed25519.pub', 'id_rsa.pub')

@@ -17,6 +17,7 @@ insmod /mods/sdhci.ko
 insmod /mods/sdhci-pltfm.ko
 insmod /mods/sdhci-iproc.ko
 insmod /mods/bcm2835.ko
+
 insmod /mods/nls_ascii.ko
 insmod /mods/nls_cp437.ko
 insmod /mods/fat.ko
@@ -50,7 +51,7 @@ fi
 
 #XXX Seed kernel RNG on first boot?
 
-# Switch to the real root.
+# Mount the real root
 LAYERS=
 for layer in `cat /boot/$ROOTSLOT/layers` ../$ROOTSLOT/finalize; do
     mount -tsquashfs -oro /boot/layers/$layer.sqfs /boot/layers/$layer
@@ -76,13 +77,32 @@ mount --move /boot /newroot/boot
 # debugging: leave old root visible under the new root
 #mount --bind / /newroot/mnt
 
-# Mount sys
-mount sysfs /newroot/sys -t sysfs -o nosuid,noexec,nodev
+# Mount sys/tmp/run
+mount sysfs /newroot/sys -t sysfs -o nosuid,nodev,noexec
+mount tmpfs /newroot/tmp -t tmpfs -o nosuid,nodev,noexec
+mount tmpfs /newroot/run -t tmpfs -o nosuid,nodev,noexec
 
+# Initramfs debugging
+if grep -q INITSH /newroot/proc/cmdline; then
+    echo INITSH Debug mode
+    setsid -c /bin/sh -l
+fi
+
+# Do we have a CMD override?
 if egrep -q ' cmd_to_eol=.+$' /newroot/proc/cmdline; then
     CMD=`egrep -o 'cmd_to_eol=.+$' /newroot/proc/cmdline | cut -d'=' -f2-`
 else
     CMD=`cat /newroot/boot/initcmd.txt`
 fi
+
 echo "initrd finished, switching roots, cmd: $CMD"
+if echo "$CMD" | egrep -q "^[']/bin/(ba|z|fi)?sh[']$"; then
+    echo
+    echo '#############################################################'
+    echo "You may want to \"setsid -c $CMD\" to enable ctrl-c/ctrl-z/etc."
+    echo '#############################################################'
+    echo
+fi
+
+# Launch the cmd
 exec switch_root /newroot /bin/sh -c "exec $CMD"
