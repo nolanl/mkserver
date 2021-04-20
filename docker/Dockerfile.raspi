@@ -3,7 +3,8 @@ FROM docker.io/debian:bullseye-slim
 RUN    sed -i 's/main/main non-free/g' /etc/apt/sources.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        tiny-initramfs linux-image-arm64 openssh-server \
+        tiny-initramfs linux-image-arm64 \
+        isc-dhcp-client openssh-server net-tools \
     && apt-get clean
 
 CMD ["/bin/bash"]

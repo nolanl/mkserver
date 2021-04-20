@@ -82,6 +82,9 @@ mount sysfs /newroot/sys -t sysfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/tmp -t tmpfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/run -t tmpfs -o nosuid,nodev,noexec
 
+# Bring up networking
+chroot /newroot modprobe -a rndis_host dwc2
+
 # Initramfs debugging
 if grep -q INITSH /newroot/proc/cmdline; then
     echo INITSH Debug mode

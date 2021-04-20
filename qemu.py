@@ -34,8 +34,14 @@ def qemu_run(imgdir, cmd=None):
     size = int(subprocess.check_output(['du', '-sb', imgdir], universal_newlines=True).split()[0])
     size = next_power_of_2(size + SLOP)
 
+    #qemu's pi USB emulation isn't complete, at least as of 5.2.0
+    #XXX is this only needed on raspbian?
+    kernel_args = 'dwc_otg.fiq_fsm_enable=0 ' + kernel_args
+
     qemu_args = [qemu, '-M', 'raspi3b', '-m', '1024',
                  '-kernel', kernel, '-dtb', dtb, '-initrd', initrd, '-append', kernel_args,
+                 '-device', 'usb-net,netdev=net0',
+                 '-netdev', 'user,id=net0,hostfwd=tcp::22222-:22',
                  '-sd', '$nbd', '-nographic',
                  '-chardev', 'stdio,id=char0,mux=on,signal=off',
                  '-serial', 'chardev:char0', '-serial', 'chardev:char0', '-mon', 'chardev=char0']
