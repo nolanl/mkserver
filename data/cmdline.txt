@@ -1,1 +1,1 @@
-8250.nr_uarts=1 net.ifnames=0 bcm2708_fb.fbwidth=1920 bcm2708_fb.fbheight=1200 bcm2708_fb.fbswap=1 root=slota console=tty1 console=ttyS0,115200
+8250.nr_uarts=1 net.ifnames=0 root=slota console=tty1 console=ttyS0,115200
