@@ -36,7 +36,7 @@ datadir = os.path.join(scriptroot, 'data')
 
 for i in ('xorriso', 'tar2sqfs'):
     if shutil.which(i) is None:
-        print('%s is required, but not installed' % i)
+        print('%s is required, but not installed' % i, file=sys.stderr)
         sys.exit(99)
 
 parser = argparse.ArgumentParser(description='Build a server bootdir from a container image.')
@@ -56,16 +56,21 @@ args = parser.parse_args()
 
 if args.run:
     qemu_run(args.run, args.cmd)
-    assert(False)
-elif args.make_bootable:
+    assert(False) #qemu_run never returns.
+
+if sys.stdin.isatty():
+    print('stdin is a TTY, did you forget to pipe in a tarstream?', file=sys.stderr)
+    sys.exit(98)
+
+if args.make_bootable:
     bootdir = args.make_bootable
     slotdir = os.path.join(bootdir, 'slota')
     with contextlib.suppress(FileNotFoundError):
         if len(os.listdir(bootdir)) != 0:
-            print("make-bootable output directory isn't empty!")
+            print("make-bootable output directory isn't empty!", file=sys.stderr)
             sys.exit(97)
         if not os.access(bootdir, os.W_OK | os.X_OK):
-            print("make-bootable output directory isn't writable!")
+            print("make-bootable output directory isn't writable!", file=sys.stderr)
             sys.exit(96)
 elif args.upgrade:
     bootdir = None #XXX?
