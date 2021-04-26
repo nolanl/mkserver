@@ -4,7 +4,7 @@
 # We need /proc to mount anything, /dev to mount /boot,
 # and /boot for the new root image.
 mount proc /proc -t proc -o nosuid,noexec,nodev
-mount devtmpfs /dev -t devtmpfs -o nosuid,noexec
+mount devtmpfs /dev -t devtmpfs -o ro,nosuid,noexec
 
 # Reopen stdin/out/err now that we have a real /dev
 exec 0</dev/console
@@ -34,7 +34,7 @@ ROOTSLOT=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2-`
 #Try all partitions until one has a slot with a layers file.
 for i in `egrep -o ' (mmcblk[0-9]+p[0-9]+|[shv]d[a-z]+[0-9]+)$' /proc/partitions`; do
     #XXX Maybe check that it is fat/vfat/exfat before trying to mount?
-    if ! mount /dev/$i /boot -o ro; then
+    if ! mount /dev/$i /boot -o ro,flush,umask=0077; then
         continue
     fi
     if [ -f /boot/$ROOTSLOT/layers ]; then
