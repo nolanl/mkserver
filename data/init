@@ -82,9 +82,6 @@ mount sysfs /newroot/sys -t sysfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/tmp -t tmpfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/run -t tmpfs -o nosuid,nodev,noexec
 
-# Bring up networking
-chroot /newroot modprobe -a rndis_host dwc2
-
 # Initramfs debugging
 if grep -q INITSH /newroot/proc/cmdline; then
     echo INITSH Debug mode
@@ -96,6 +93,11 @@ if egrep -q ' cmd_to_eol=.+$' /newroot/proc/cmdline; then
     CMD=`egrep -o 'cmd_to_eol=.+$' /newroot/proc/cmdline | cut -d'=' -f2-`
 else
     CMD=`cat /newroot/boot/initcmd.txt`
+fi
+
+# If we don't have a real init, do all the stuff a container image expects here.
+if ! echo "$CMD" | egrep -q '^/sbin/init$'; then
+    chroot /newroot /boot/$ROOTSLOT/bin/mininit
 fi
 
 echo "initrd finished, switching roots, cmd: $CMD"

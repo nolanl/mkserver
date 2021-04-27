@@ -147,6 +147,11 @@ finalize_layer = os.path.join(slotdir, 'finalize')
 dict_to_layer(finalize, finalize_layer)
 os.makedirs(finalize_layer, exist_ok=True)
 
+#Copy our scripts into the slotdir's bin/
+slotbin = os.path.join(slotdir, 'bin')
+os.makedirs(slotbin, exist_ok=True)
+shutil.copy(os.path.join(datadir, 'mininit'), slotbin)
+
 #Finish up. Write whole firmware, or do remote upgrade.
 if args.make_bootable:
     if arch == 'arm64':
