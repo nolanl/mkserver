@@ -77,10 +77,14 @@ mount --move /boot /newroot/boot
 # debugging: leave old root visible under the new root
 #mount --bind / /newroot/mnt
 
-# Mount sys/tmp/run
+# Mount some other tmpfs for system FSes.
 mount sysfs /newroot/sys -t sysfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/tmp -t tmpfs -o nosuid,nodev,noexec
 mount tmpfs /newroot/run -t tmpfs -o nosuid,nodev,noexec
+#XXX noexec /var will break docker/podman. Maybe able to use fapolicyd or similar
+#    to effectively get noexec semantics by allowing exec of files in /var iff
+#    the process is in a suitable namespace?
+mount tmpfs /newroot/var -t tmpfs -o nosuid,nodev,noexec
 
 # Initramfs debugging
 if grep -q INITSH /newroot/proc/cmdline; then
