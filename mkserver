@@ -7,12 +7,13 @@ from deb import extract_files_from_deb_url
 from initramfs import Initramfs
 from layers import ContainerStream, dict_to_layer
 from qemu import qemu_run
+from update import update_host
 
 #XXX Add a wrapper around podman build.
 
 #XXX Cache these somewhere? ~/.cache/mkserver?
 #XXX Check sha256sums of these.
-pi_firmware_url='https://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210111+ds-2_arm64.deb'
+pi_firmware_url='https://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210303+ds-2_arm64.deb'
 busybox_url='https://deb.debian.org/debian/pool/main/b/busybox/busybox-static_1.30.1-6+b1_%s.deb'
 
 mods = [
