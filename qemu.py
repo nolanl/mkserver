@@ -3,9 +3,9 @@ import os, subprocess
 import util
 
 #XXX x86-64 support
-qemu = 'qemu-system-aarch64'
-nbdkit = 'nbdkit'
-dtb_filename = 'bcm2837-rpi-3-b.dtb'
+qemu = os.environ.get('QEMU', 'qemu-system-aarch64')
+nbdkit = os.environ.get('NBDKIT', 'nbdkit')
+dtb_filename = os.environ.get('DTB', 'bcm2837-rpi-3-b.dtb')
 
 SLOP = 256 * 1024 * 1024
 
