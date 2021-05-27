@@ -5,7 +5,7 @@ import util
 #XXX x86-64 support
 qemu = os.environ.get('QEMU', 'qemu-system-aarch64')
 nbdkit = os.environ.get('NBDKIT', 'nbdkit')
-dtb_filename = os.environ.get('DTB', 'bcm2837-rpi-3-b.dtb')
+dtb_filename = os.environ.get('DTB', 'bcm2710-rpi-3-b.dtb')
 
 SLOP = 256 * 1024 * 1024
 
@@ -16,18 +16,11 @@ def next_power_of_2(n):
     return k
 
 def qemu_run(imgdir, cmd=None):
-    with open(os.path.join(imgdir, 'config.txt'), 'r') as cfgf:
-        for l in cfgf.readlines():
-            if l.startswith('kernel='):
-                kernel = os.path.join(imgdir, l.split('=')[1]).strip()
-            elif l.startswith('initramfs '):
-                initrd = os.path.join(imgdir, l.split(' ')[1]).strip()
     dtb = os.path.join(imgdir, dtb_filename)
 
-    with open(os.path.join(imgdir, 'cmdline.txt'), 'r') as cmdlinef:
-        kernel_args = cmdlinef.readlines()[0].strip()
+    kernel_args = ''
     if cmd is not None:
-        kernel_args += ' cmd_to_eol=%s' % cmd
+        kernel_args += 'XQEMUXcmd_to_eol=%s' % cmd
 
     #sdcards must be a power of 2, so we figure out the size of the dir, add some slop, then
     # pick the next highest power of 2.
@@ -35,7 +28,7 @@ def qemu_run(imgdir, cmd=None):
     size = next_power_of_2(size + SLOP)
 
     qemu_args = [qemu, '-M', 'raspi3b', '-m', '1024',
-                 '-kernel', kernel, '-dtb', dtb, '-initrd', initrd, '-append', kernel_args,
+                 '-kernel', os.path.join(imgdir, 'u-boot.bin'), '-dtb', dtb, '-append', kernel_args,
                  '-device', 'usb-net,netdev=net0',
                  '-netdev', 'user,id=net0,hostfwd=tcp::22222-:22',
                  '-sd', '$nbd', '-nographic',

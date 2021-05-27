@@ -1,1 +1,0 @@
-8250.nr_uarts=1 net.ifnames=0 root=slota console=tty1 console=ttyS0,115200

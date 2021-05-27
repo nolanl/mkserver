@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, sys, os, shutil, glob, contextlib, tempfile, socket, stat, secrets
+import argparse, sys, os, shutil, glob, contextlib, tempfile, socket, stat, secrets, subprocess
 from string import Template
 
 import util
@@ -14,6 +14,7 @@ from update import update_host
 #XXX Cache these somewhere? ~/.cache/mkserver?
 #XXX Check sha256sums of these.
 pi_firmware_url='https://deb.debian.org/debian/pool/non-free/r/raspi-firmware/raspi-firmware_1.20210303+ds-2_arm64.deb'
+uboot_url='https://deb.debian.org/debian/pool/main/u/u-boot/u-boot-rpi_2021.01+dfsg-4_arm64.deb'
 busybox_url='https://deb.debian.org/debian/pool/main/b/busybox/busybox-static_1.30.1-6+b1_%s.deb'
 
 mods = [
@@ -35,7 +36,7 @@ mods = [
 scriptroot = os.path.dirname(__file__)
 datadir = os.path.join(scriptroot, 'data')
 
-for i in ('xorriso', 'tar2sqfs'):
+for i in ('tar2sqfs', 'mkenvimage', 'xorriso'):
     if shutil.which(i) is None:
         print('%s is required, but not installed' % i, file=sys.stderr)
         sys.exit(99)
@@ -156,17 +157,19 @@ shutil.copy(os.path.join(datadir, 'mininit'), slotbin)
 #Finish up. Write whole firmware, or do remote upgrade.
 if args.make_bootable:
     if arch == 'arm64':
-        extract_files_from_deb_url(pi_firmware_url, '^./usr/lib/raspi-firmware/', bootdir)
+        util.write_uboot_script(bootdir, 'slota', kernelver)
 
-        #Copy bootslot .dtb files into outdir
-        for dtb in glob.glob(os.path.join(slotdir, '*.dtb')):
+        extract_files_from_deb_url(pi_firmware_url, '^./usr/lib/raspi-firmware/', bootdir)
+        extract_files_from_deb_url(uboot_url, '^./usr/lib/u-boot/rpi_arm64/u-boot.bin', bootdir)
+
+        #Copy u-boot .dtb files into bootdir. Kernel dtbs live in the slotdir.
+        for dtb in glob.glob(os.path.join(datadir, 'dtb', '*.dtb')):
             shutil.copy(dtb, bootdir)
 
-        shutil.copy(os.path.join(datadir, 'cmdline.txt'), bootdir)
-
-        with (open(os.path.join(datadir, 'config.txt'), 'r') as inf,
-              open(os.path.join(bootdir, 'config.txt'), 'w') as outf):
-             outf.write(Template(inf.read()).substitute(kernelver=kernelver))
+        shutil.copy(os.path.join(datadir, 'config.txt'), bootdir)
+        with open(os.path.join(bootdir, 'uboot.env'), 'wb') as f:
+            subprocess.Popen(['mkenvimage', '-o-', '-s16384', '-p0', os.path.join(datadir, 'ubootenv.txt')],
+                             stdout=f)
 
         if args.cmd:
             cmd = args.cmd

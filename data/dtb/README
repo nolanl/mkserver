@@ -1,0 +1,4 @@
+These dtbs are from http://github.com/raspberrypi/firmware/archive/1.20200902.tar.gz
+
+They are used specifically because Debian's u-boot-rpi_2021.01+dfsg-4_arm64 doesn't include dtbs, and has a garbled serial port when using the Debian kernel's dtbs, likely due to the changing CPU clock:
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=976122
