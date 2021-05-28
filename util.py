@@ -1,7 +1,16 @@
 import subprocess, os
 
+def shell_escape(arg):
+    dangerchars = ('\\', ' ', "'", '"', '`', '&', '|', ';', '#',
+                   '$', '!', '(', ')', '[', ']', '<', '>', '\t')
+    if len(arg) == 0:
+        return "''"
+    for char in dangerchars:
+        arg = arg.replace(char, '\\%s' % char)
+    return arg
+
 def posix_list2cmdline(args):
-    return ' '.join(["'%s'" % c for c in args]) #XXX Escape "'" in cmdlist elements
+    return ' '.join([shell_escape(arg) for arg in args])
 
 def write_uboot_script(outdir, slotname, kernelver):
     slotcfgtxt = os.path.join(outdir, 'slotcfg.txt')

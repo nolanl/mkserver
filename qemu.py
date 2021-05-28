@@ -31,10 +31,10 @@ def qemu_run(imgdir, cmd=None):
                  '-kernel', os.path.join(imgdir, 'u-boot.bin'), '-dtb', dtb, '-append', kernel_args,
                  '-device', 'usb-net,netdev=net0',
                  '-netdev', 'user,id=net0,hostfwd=tcp::22222-:22',
-                 '-sd', '$nbd', '-nographic',
-                 '-chardev', 'stdio,id=char0,mux=on,signal=off',
+                 '-device', 'sd-card,drive=bootsd', '-drive', 'file=$nbd,if=none,format=raw,id=bootsd',
+                 '-nographic', '-chardev', 'stdio,id=char0,mux=on,signal=off',
                  '-serial', 'chardev:char0', '-serial', 'chardev:char0', '-mon', 'chardev=char0']
-    qemu_args = util.posix_list2cmdline(qemu_args).replace("'$nbd'", '$nbd')
+    qemu_args = util.posix_list2cmdline(qemu_args).replace('\\$nbd', '$nbd')
     args = [nbdkit, '-U', '-', '--filter=truncate', '--filter=cow',
             'floppy', 'dir=%s' % imgdir, 'truncate=%s' % size,
             '--run', qemu_args]
