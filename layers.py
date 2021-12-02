@@ -25,7 +25,7 @@ class ContainerStream:
         self.jsonfiles = {}
         tar = tarfile.open(fileobj=infp, mode='r|')
         for tinfo in tar:
-            name = tinfo.name
+            name = os.path.normpath(tinfo.name)
 
             if name.endswith('.json'):
                 self.jsonfiles[name] = json.loads(tar.extractfile(tinfo).read().decode('utf-8'))
