@@ -15,3 +15,7 @@ To test an image locally using qemu:
 ```
 $ mkserver --run /path/to/imagedir
 ```
+
+TODO:
+ - Ubuntu, Alpine, Openwrt, Raspbian, minimal busybox, Fedora, more?
+ - fs-verity?

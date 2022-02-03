@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#XXX Set PATH
+
 #XXX Does any of mounting /sys, /tmp or /run get done by systemd itself?
 mount -oremount,rw /dev
 mkdir /dev/pts
