@@ -29,7 +29,7 @@ insmod /mods/overlay.ko
 # Wait a little for devices to appear.
 sleep 2
 
-ROOTSLOT=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2-`
+ROOTSLOT=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2`
 
 #Try all partitions until one has a slot with a layers file.
 for i in `egrep -o ' (mmcblk[0-9]+p[0-9]+|[shv]d[a-z]+[0-9]+)$' /proc/partitions`; do
