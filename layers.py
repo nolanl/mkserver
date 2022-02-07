@@ -1,5 +1,6 @@
-import os, tarfile, json, re, subprocess, time
+import os, tarfile, json, re, subprocess, time, glob
 from io import BytesIO
+from util import SHA256Pipe
 
 def tar2sqfs_cmd(tarfile):
     #XXX xz for fast CPUs, lzo (or default gzip) for slow?
@@ -30,9 +31,11 @@ class ContainerStream:
             if name.endswith('.json'):
                 self.jsonfiles[name] = json.loads(tar.extractfile(tinfo).read().decode('utf-8'))
 
-            if name.endswith('.tar') and not name.endswith('layer.tar'):
-                innertar = tarfile.open(fileobj=tar.extractfile(tinfo), mode='r|')
-                cmd = subprocess.Popen(cmd_func(os.path.join(outdir, name)), stdin=subprocess.PIPE)
+            if name.endswith('.tar') and not tinfo.issym():
+                sha256wrapper = SHA256Pipe(tar.extractfile(tinfo))
+                innertar = tarfile.open(fileobj=sha256wrapper, mode='r|')
+                tempname = os.path.join(outdir, '__tempname__.tar')
+                cmd = subprocess.Popen(cmd_func(tempname), stdin=subprocess.PIPE)
                 outtar = tarfile.open(fileobj=cmd.stdin, mode='w|')
 
                 for innertinfo in innertar:
@@ -59,10 +62,19 @@ class ContainerStream:
                         else:
                             outtar.addfile(innertinfo)
 
+                #Close, then read any leftover padding so the hash is correct.
                 innertar.close()
+                sha256wrapper.readall()
+
                 outtar.close()
                 cmd.wait()
                 assert(cmd.returncode == 0)
+
+                #Now move the temporary name to the final name
+                tempname = glob.glob(tempname.replace('.tar', '.*')) #may have changed extensions.
+                assert(len(tempname) == 1)
+                tempname = tempname[0]
+                os.rename(tempname, tempname.replace('__tempname__', sha256wrapper.hexdigest()))
 
         tar.close()
 
