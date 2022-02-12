@@ -105,7 +105,7 @@ if ! echo "$CMD" | egrep -q '^/sbin/init$'; then
 fi
 
 echo "initrd finished, switching roots, cmd: $CMD"
-if echo "$CMD" | egrep -q "^[']/bin/(ba|z|fi)?sh[']$"; then
+if echo "$CMD" | egrep -q "^/bin/(ba|z|fi)?sh$"; then
     echo
     echo '#############################################################'
     echo "You may want to \"setsid -c $CMD\" to enable ctrl-c/ctrl-z/etc."
