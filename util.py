@@ -1,4 +1,4 @@
-import subprocess, os, io, hashlib
+import subprocess, os, io, hashlib, shutil, urllib.request, urllib.parse
 
 def shell_escape(arg):
     dangerchars = ('\\', ' ', "'", '"', '`', '&', '|', ';', '#',
@@ -36,3 +36,21 @@ class SHA256Pipe(io.RawIOBase):
         return l
     def hexdigest(self):
         return self.hasher.hexdigest()
+
+class BadDigest(Exception):
+    pass
+def urlopen_cache(url, sha256):
+    cachedir = os.path.expanduser('~/.cache/mkserver') #XXX use appdirs here?
+    os.makedirs(cachedir, exist_ok=True)
+    cachefname = os.path.join(cachedir, os.path.split(urllib.parse.urlsplit(url).path)[-1] )
+
+    if not os.path.exists(cachefname):
+        partfname = cachefname + '.PART'
+        inf = SHA256Pipe(urllib.request.urlopen(url))
+        with open(partfname, 'wb') as outf:
+            shutil.copyfileobj(inf, outf)
+            #XXX check inf.hexdigest() first
+            if inf.hexdigest() != sha256:
+                raise BadDigest('Downloaded file %s has wrong sha256' % partfname)
+            os.rename(partfname, cachefname)
+    return open(cachefname, 'rb')

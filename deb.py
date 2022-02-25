@@ -1,11 +1,11 @@
-import urllib.request, re, tarfile, os, shutil
+import util, re, tarfile, os, shutil
 
 #Extracts files matching path_regex from a deb from url. Directory structure
 # is not preserved from the deb, all files end up in at toplevel in outdir.
-def extract_files_from_deb_url(url, path_regex, outdir):
+def extract_files_from_deb_url(url, sha256, path_regex, outdir):
     regex = re.compile(path_regex)
 
-    with urllib.request.urlopen(url) as f:
+    with util.urlopen_cache(url, sha256) as f:
         assert(f.read(8) == b'!<arch>\n')
         while True:
             fname = f.read(16).rstrip()

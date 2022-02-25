@@ -11,7 +11,7 @@ class Initramfs:
                   'bin', 'dev', 'etc', 'proc', 'sys', 'tmp', 'var'):
             os.makedirs(os.path.join(self.tmpdir, d))
 
-        extract_files_from_deb_url(busybox_url, '^./bin/busybox', os.path.join(self.tmpdir, 'bin'))
+        extract_files_from_deb_url(*busybox_url, '^./bin/busybox', os.path.join(self.tmpdir, 'bin'))
         bbox = os.path.join(self.tmpdir, 'bin', 'busybox')
         os.chmod(bbox, stat.S_IRUSR | stat.S_IXUSR)
         buf = subprocess.check_output([bbox, '--list']).decode()
