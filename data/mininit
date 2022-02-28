@@ -5,7 +5,7 @@
 #XXX Does any of mounting /sys, /tmp or /run get done by systemd itself?
 mount -oremount,rw /dev
 mkdir /dev/pts
-mount -oremount,ro /dev
+mount -oremount,ro /dev #XXX devtmpfs won't create new devices when mounted ro!
 TTYGID=`grep ^tty: /etc/group | cut -d':' -f3`
 mount devpts /dev/pts -t devpts -o ro,nosuid,noexec,gid=$TTYGID,mode=620,ptmxmode=000
 
@@ -15,14 +15,21 @@ modprobe bcm2835_wdt
 #Reset driver tells firmware to reload PCIe USB firmware before reboot.
 modprobe reset-raspberrypi
 
-#XXX raspberrypi-cpufreq?
+modprobe raspberrypi-cpufreq
+
+#USB
+modprobe -a dwc2 xhci_pci
+
+#USB storage.
+modprobe -a uas usb-storage sd_mod
 
 #Networking
 ifconfig lo 127.0.0.1/8 up
 
 #XXX Support wifi too
-#XXX rndis_host is just for qemu pi3, need to figure out real pi3/4. smsc95xx.ko
-modprobe -a rndis_host dwc2
+modprobe rndis_host #for qemu.
+modprobe genet #for real rpi4
+#XXX smsc95xx for real rpi3?
 
 IFACE=eth0
 #XXX Support static IPs too
