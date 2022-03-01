@@ -42,9 +42,8 @@ class BadDigest(Exception):
 def urlopen_cache(url, sha256):
     cachedir = os.path.expanduser('~/.cache/mkserver') #XXX use appdirs here?
     os.makedirs(cachedir, exist_ok=True)
-    cachefname = os.path.join(cachedir, os.path.split(urllib.parse.urlsplit(url).path)[-1] )
+    cachefname = os.path.join(cachedir, os.path.split(urllib.parse.urlsplit(url).path)[-1])
 
-    #XXX Verify SHA256 of the cached artifact.
     if not os.path.exists(cachefname):
         partfname = cachefname + '.PART'
         inf = SHA256Pipe(urllib.request.urlopen(url))
@@ -53,4 +52,13 @@ def urlopen_cache(url, sha256):
             if inf.hexdigest() != sha256:
                 raise BadDigest('Downloaded file %s has wrong sha256' % partfname)
             os.rename(partfname, cachefname)
+    else:
+        h  = hashlib.sha256()
+        mv = memoryview(bytearray(128*1024))
+        with open(cachefname, 'rb', buffering=0) as f:
+            for n in iter(lambda : f.readinto(mv), 0):
+                h.update(mv[:n])
+        if h.hexdigest() != sha256:
+            raise BadDigest('Cached file %s has wrong sha256' % cachefname)
+
     return open(cachefname, 'rb')
