@@ -44,12 +44,12 @@ def urlopen_cache(url, sha256):
     os.makedirs(cachedir, exist_ok=True)
     cachefname = os.path.join(cachedir, os.path.split(urllib.parse.urlsplit(url).path)[-1] )
 
+    #XXX Verify SHA256 of the cached artifact.
     if not os.path.exists(cachefname):
         partfname = cachefname + '.PART'
         inf = SHA256Pipe(urllib.request.urlopen(url))
         with open(partfname, 'wb') as outf:
             shutil.copyfileobj(inf, outf)
-            #XXX check inf.hexdigest() first
             if inf.hexdigest() != sha256:
                 raise BadDigest('Downloaded file %s has wrong sha256' % partfname)
             os.rename(partfname, cachefname)
