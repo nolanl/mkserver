@@ -6,7 +6,7 @@ import util
 from deb import extract_files_from_deb_url
 from initramfs import Initramfs
 from layers import ContainerStream, dict_to_layer
-from qemu import qemu_run
+from qemu import Qemu
 from update import update_host
 
 #XXX Add a wrapper around podman/docker build.
@@ -59,7 +59,8 @@ group.add_argument('--run', help='run (in emulation) the bootable image in the g
 args = parser.parse_args()
 
 if args.run:
-    qemu_run(args.run, args.cmd)
+    qemu= Qemu(args.run, args.cmd)
+    qemu.exec()
     assert(False) #qemu_run never returns.
 
 if sys.stdin.isatty():
