@@ -8,7 +8,7 @@ nbdkit = os.environ.get('NBDKIT', 'nbdkit')
 dtb_filename = os.environ.get('DTB', 'bcm2710-rpi-3-b.dtb')
 
 semver = re.compile('[0-9]+[.][0-9]+[.][0-9]+')
-def _recent_program(program, needmajor, needminor, needpatch):
+def _recent_version(program, needmajor, needminor, needpatch):
     verstr = subprocess.run([program, '--version'], capture_output=True).stdout.decode()
     major, minor, patch = [int(i) for i in semver.search(verstr)[0].split('.')]
     return major > needmajor or (major == needmajor and minor > needminor) or \
@@ -33,18 +33,17 @@ def qemu_run(imgdir, cmd=None):
                  '-serial', 'chardev:char0', '-serial', 'chardev:char0', '-mon', 'chardev=char0']
     qemu_args = util.posix_list2cmdline(qemu_args).replace('\\$nbd', '$nbd')
 
-    recent_nbdkit, recent_qemu = _recent_program(nbdkit, 1, 27, 2), _recent_program(qemu, 6, 1, 0)
-    if recent_nbdkit and recent_qemu:
+    recent_nbdkit, recent_qemu = _recent_version(nbdkit, 1, 27, 2), _recent_version(qemu, 6, 1, 0)
+    if not recent_qemu:
+        print('WARNING: Your qemu is too old to support soft rebooting rapsberry'
+              ' pis, so mkserver --update will not work. You need 6.1.0 or newer', file=sys.stderr)
+    if recent_nbdkit:
         args = [nbdkit, '-U', '-', '--filter=cow',
                 'floppy', 'dir=%s' % imgdir, 'size=%s' % size,
                 '--run', qemu_args]
     else:
-        if not recent_nbdkit:
-            print('WARNING: Your nbdkit is too old to support writing to the SDCard,'
-                  ' so mkserver --update will not work. You need 1.27.2 or newer.', file=sys.stderr)
-        if not recent_qemu:
-            print('WARNING: Your qemu is too old to support soft rebooting rapsberry'
-                  ' pis, so mkserver --update will not work. You need 6.1.0 or newer', file=sys.stderr)
+        print('WARNING: Your nbdkit is too old to support writing to the SDCard,'
+              ' so mkserver --update will not work. You need 1.27.2 or newer.', file=sys.stderr)
         args = [nbdkit, '-U', '-', '--filter=truncate', '--filter=cow',
                 'floppy', 'dir=%s' % imgdir, 'truncate=%s' % size,
                 '--run', qemu_args]
