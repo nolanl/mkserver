@@ -4,7 +4,8 @@
 # We need /proc to mount anything, /dev to mount /boot,
 # and /boot for the new root image.
 mount proc /proc -t proc -o nosuid,noexec,nodev
-mount devtmpfs /dev -t devtmpfs -o ro,nosuid,noexec
+#XXX Should mount /dev ro, but then devtmpfs won't create new devnodes for new devices.
+mount devtmpfs /dev -t devtmpfs -o rw,nosuid,noexec
 
 # Reopen stdin/out/err now that we have a real /dev
 exec 0</dev/console
@@ -106,6 +107,7 @@ fi
 
 echo "initrd finished, switching roots, cmd: $CMD"
 if echo "$CMD" | egrep -q "^/bin/(ba|z|fi)?sh$"; then
+    #XXX try https://www.earth.li/~noodles/blog/2022/04/resizing-consoles-automatically.html
     echo
     echo '#############################################################'
     echo "You may want to \"setsid -c $CMD\" to enable ctrl-c/ctrl-z/etc."

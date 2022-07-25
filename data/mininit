@@ -3,11 +3,11 @@
 #XXX Set PATH
 
 #XXX Does any of mounting /sys, /tmp or /run get done by systemd itself?
-mount -oremount,rw /dev
 mkdir /dev/pts
-mount -oremount,ro /dev #XXX devtmpfs won't create new devices when mounted ro!
 TTYGID=`grep ^tty: /etc/group | cut -d':' -f3`
 mount devpts /dev/pts -t devpts -o ro,nosuid,noexec,gid=$TTYGID,mode=620,ptmxmode=000
+
+#XXX What to do about RNG seeding? https://git.zx2c4.com/seedrng/about/
 
 #Need watchdog to be able to reboot
 modprobe bcm2835_wdt
