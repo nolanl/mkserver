@@ -1,0 +1,105 @@
+#!/bin/sh
+
+check_path() {
+    if echo $1 | egrep -q '^/|/[.][.]/|^[.][.]/|/[.][.]$'; then
+        echo "INVALID PATH: $1" >&2
+        exit 97
+    fi
+}
+
+dd_file() {
+    #XXX Bullseye busybox doesn't do count_bytes/fullblock.
+    #    Perhaps head -c#, but need to verify it can detect errors.
+    if dd of="$1" count="$2" bs=$((2*1024*1024)) iflag=count_bytes,fullblock; then
+        echo "OK"
+    else
+        echo "FAIL $?"
+        echo "FAIL $?" >&2
+    fi
+}
+
+CURSLOT=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2`
+NEWSLOT=`echo $CURSLOT | tr ab ba`
+
+echo "$CURSLOT $NEWSLOT"
+
+for layer in `ls /boot/layers/*.sqfs`; do
+    basename $layer .sqfs
+done
+echo '__ENDLAYERS__'
+
+mount -oremount,rw /boot
+cleanup() {
+    mount -oremount,ro /boot
+}
+trap cleanup INT TERM
+
+BOOTSLOT_CLEARED=false
+while read arg1 arg2 arg3 arg4 arg5 arg6; do
+    if [ $arg1 = 'PUTLAYER' ]; then
+        check_path $arg2
+
+        mkdir /boot/layers/`basename $arg2 .sqfs`
+        dd_file "/boot/layers/$arg2" "$arg3"
+
+    elif [ $arg1 = 'PUTBOOTSLOT' ]; then
+        check_path $arg2
+
+        if [ $BOOTSLOT_CLEARED != true ]; then
+            BOOTSLOT_CLEARED=true
+            rm -rf /boot/$NEWSLOT
+            mkdir -p /boot/$NEWSLOT/finalize
+        fi
+
+        filename="/boot/$NEWSLOT/$arg2"
+        mkdir -p `dirname $filename`
+        dd_file "$filename" "$arg3"
+
+    elif [ $arg1 = 'FINALIZE' ]; then
+        cp /boot/$NEWSLOT/slotcfg.scr /boot/
+
+        curlayers="`cat /boot/slot*/layers | sort | uniq`"
+        for layer in `ls -1 /boot/layers/*.sqfs`; do
+            layer="`basename $layer .sqfs`"
+            if ! echo "$curlayers" | grep -q "$layer"; then
+                rmdir "/boot/layers/$layer"
+                rm "/boot/layers/$layer.sqfs"
+            fi
+        done
+
+        echo "OK"
+
+    elif [ $arg1 = 'REBOOT' ]; then
+        sync
+
+        cleanup
+
+        if which kexec >/dev/null; then
+            #XXX With no PSCI, kexec doesn't work on rpi. Sigh.
+            #XXX Use the right .dtb
+            KVER=`ls -1 /boot/$NEWSLOT/vmlinuz-* | cut -d- -f2-`
+            kexec /boot/$NEWSLOT/vmlinuz-$KVER --dtb=/boot/bcm2837-rpi-3-b.dtb \
+                  --initrd=/boot/$NEWSLOT/initrd.img-$KVER "--append=$(cat /boot/cmdline.txt)"
+        else
+            echo 1 > /proc/sys/kernel/sysrq
+
+            #XXX SIGTERM all tasks (except us), wait, then SIGKILL.
+
+            echo s > /proc/sysrq-trigger #Sync
+            echo u > /proc/sysrq-trigger #Remount all FSes readonly
+            echo s > /proc/sysrq-trigger #Sync
+
+            #This needs either qemu 6.1.0 or better, or needs my patch.
+            echo b > /proc/sysrq-trigger #Reboot
+        fi
+
+        echo "Reboot failed! WTF, we shouldn't get here!" >&2
+        exit 98
+
+    else
+        echo "BAD COMMAND: $arg1" >&2
+        exit 99
+    fi
+done
+
+cleanup

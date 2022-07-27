@@ -49,11 +49,14 @@ parser.add_argument('--domain', help='domain name of the server')
 parser.add_argument('--no-sshkey', help='don\'t install an ssh auth key for the root user',
                     action='store_true')
 parser.add_argument('--cmd', type=str,
-                    help='run a different command than the default for this container')
+                    help='run a different command than the default for this container') #XXX not for --update!
+parser.add_argument('--sshport', type=str, default='22',
+                    help='update using a non-standard ssh port') #XXX only for --update!
+
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--make-bootable', help='make a bootable starter image in the given directory',
                     type=str)
-group.add_argument('--upgrade', help='install the image on an existing server', type=str)
+group.add_argument('--update', help='install the image on an existing server', type=str)
 group.add_argument('--run', help='run (in emulation) the bootable image in the given directory', type=str)
 
 args = parser.parse_args()
@@ -77,16 +80,18 @@ if args.make_bootable:
         if not os.access(bootdir, os.W_OK | os.X_OK):
             print("make-bootable output directory isn't writable!", file=sys.stderr)
             sys.exit(96)
-elif args.upgrade:
-    bootdir = None #XXX?
-    slotdir = None #XXX mktempdir? make user specify dir?
+    layersdir = os.path.join(bootdir, 'layers')
+    os.makedirs(layersdir)
+    os.makedirs(slotdir)
+elif args.update:
+    slotdir_obj = tempfile.TemporaryDirectory(prefix='mks_slot_')
+    layersdir_obj = tempfile.TemporaryDirectory(prefix='mks_layers_')
+    slotdir = slotdir_obj.name
+    layersdir = layersdir_obj.name
 else:
     assert(False)
-layersdir = os.path.join(bootdir, 'layers')
 
 #Extract container image info and layers
-os.mkdir(layersdir)
-os.mkdir(slotdir)
 modtempdir = tempfile.TemporaryDirectory(prefix='mks_mods_')
 putasides = [
     ('^boot/config-', (slotdir, True)), ('^boot/System.map-', (slotdir, True)),
@@ -110,6 +115,8 @@ arch = cs.get_architecture()
 
 kernelver = glob.glob(os.path.join(slotdir, 'vmlinuz-*'))[0]
 kernelver = os.path.split(kernelver)[-1][len('vmlinuz-'):]
+with open(os.path.join(slotdir, 'kver.txt'), 'w') as f:
+    f.write(kernelver)
 
 #Get hostname/domainname
 hostname = args.hostname
@@ -135,7 +142,7 @@ finalize = {
     'etc/mtab': ('SYMLINK:/proc/mounts', 0),
     'etc/machine-id': (secrets.token_hex(16) + '\n', stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
 }
-#XXX Clobber ssh host keys, if present. /var/lib/systemd/random-seed? Actually need to persist these!
+#XXX Clobber ssh host keys, if present. /etc/machine-id. /var/lib/systemd/random-seed? Actually need to persist these!
 
 if not args.no_sshkey:
     keyfiles = ('id_ed25519.pub', 'id_rsa.pub')
@@ -155,11 +162,13 @@ os.makedirs(finalize_layer, exist_ok=True)
 slotbin = os.path.join(slotdir, 'bin')
 os.makedirs(slotbin, exist_ok=True)
 shutil.copy(os.path.join(datadir, 'mininit'), slotbin)
+shutil.copy(os.path.join(datadir, 'update'), slotbin)
 
-#Finish up. Write whole firmware, or do remote upgrade.
+#Finish up. Write whole firmware, or do remote update.
 if args.make_bootable:
     if arch == 'arm64':
-        util.write_uboot_script(bootdir, 'slota', kernelver)
+        util.write_uboot_script(slotdir, 'slota', kernelver)
+        shutil.copy(os.path.join(slotdir, 'slotcfg.scr'), bootdir)
 
         extract_files_from_deb_url(*pi_firmware_url, '^./usr/lib/raspi-firmware/', bootdir)
         extract_files_from_deb_url(*uboot_url, '^./usr/lib/u-boot/rpi_arm64/u-boot.bin', bootdir)
@@ -181,12 +190,7 @@ if args.make_bootable:
             f.write(cmd)
     else:
         assert(False) #XXX xorriso for amd64.
-elif args.upgrade:
-    #XXX write me.
-    #rsync or scp over new slot/layers
-    #copy bootslot dtbs to /boot
-    #adjust config.txt/cmdline.txt
-    #GC layers dir
-    assert(False)
+elif args.update:
+    update_host(slotdir, layersdir, args.update, args.sshport)
 
 print('\nBuilt %s.%s for arch %s' % (hostname, domain, arch))

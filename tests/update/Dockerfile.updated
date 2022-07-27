@@ -1,0 +1,5 @@
+FROM mkst_update
+
+RUN touch /updated
+
+CMD ["/bin/bash"]
