@@ -59,7 +59,7 @@ group.add_argument('--run', help='run (in emulation) the bootable image in the g
 args = parser.parse_args()
 
 if args.run:
-    qemu= Qemu(args.run, args.cmd)
+    qemu = Qemu(args.run, args.cmd)
     qemu.exec()
     assert(False) #qemu_run never returns.
 

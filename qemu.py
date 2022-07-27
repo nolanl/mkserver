@@ -1,4 +1,4 @@
-import os, sys, subprocess, re
+import os, sys, subprocess, re, atexit, psutil, socket, errno
 
 import util
 
@@ -32,17 +32,20 @@ class Qemu:
                            '-drive', 'if=sd,format=raw,index=0,file=$nbd',
                            '-nographic']
 
-    def _get_qemu_args(self, monsock=None, consock=None):
-        assert(bool(consock) == bool(monsock)) #XXX Add support for only one being a socket.
-        if consock or monsock:
+    def _get_qemu_args(self, monsock=None, confile=None):
+        assert(bool(confile) == bool(monsock)) #XXX Add support for only one being specified.
+        qemu_args = self._qemu_args
+        if confile or monsock:
             if monsock:
-                pass #XXX
-            if consock:
-                pass #XXX
+                qemu_args += ['-chardev', 'socket,path=%s,server=on,wait=off,id=charmon' % monsock,
+                              '-mon', 'charmon,mode=control']
+            if confile:
+                qemu_args += ['-chardev', 'file,path=%s,mux=on,id=charcon' % confile,
+                              '-serial', 'chardev:charcon', '-serial', 'chardev:charcon']
         else:
-            qemu_args = self._qemu_args + ['-chardev', 'stdio,id=char0,mux=on,signal=off',
-                                           '-serial', 'chardev:char0', '-serial', 'chardev:char0',
-                                           '-mon', 'chardev=char0']
+            qemu_args += ['-chardev', 'stdio,id=char0,mux=on,signal=off',
+                          '-serial', 'chardev:char0', '-serial', 'chardev:char0',
+                          '-mon', 'chardev=char0']
 
         qemu_args = util.posix_list2cmdline(qemu_args).replace('\\$nbd', '$nbd')
 
@@ -66,7 +69,36 @@ class Qemu:
 
         return args
 
+    def run(self, monsock=None, confile=None):
+        if not confile:
+            print('\n#####################\nctrl-a x to exit qemu\n#####################\n')
+        self._qemu = subprocess.Popen(self._get_qemu_args(monsock=monsock, confile=confile))
+        atexit.register(self.__del__)
+
+    def wait_for_ssh(self):
+        while True:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect(('127.0.0.1', 22222))
+                    if len(s.recv(1)) == 1:
+                        break
+            except socket.error as err:
+                if err.errno != errno.ECONNREFUSED:
+                    raise err
+
+    def ssh(self, *cmd):
+        p = subprocess.run(['ssh', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no',
+                            'root@localhost', '-p', '22222', *cmd], capture_output=True)
+        return (p.returncode, p.stdout, p.stderr)
+
+    def __del__(self):
+        if hasattr(self, '_qemu'):
+            parent = psutil.Process(self._qemu.pid)
+            for child in parent.children(recursive=True):
+                child.kill()
+            parent.kill()
+            delattr(self, '_qemu')
 
     def exec(self, monsock=None):
         print('\n#####################\nctrl-a x to exit qemu\n#####################\n')
-        os.execvp(self.nbdkit, self._get_qemu_args(monsock = monsock))
+        os.execvp(self.nbdkit, self._get_qemu_args(monsock=monsock))
