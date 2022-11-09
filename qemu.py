@@ -1,4 +1,4 @@
-import os, sys, subprocess, re, atexit, psutil, socket, errno
+import os, sys, subprocess, re, atexit, psutil, socket, errno, time
 
 import util
 
@@ -85,6 +85,7 @@ class Qemu:
             except socket.error as err:
                 if err.errno != errno.ECONNREFUSED:
                     raise err
+            time.sleep(0.1)
 
     def ssh(self, *cmd):
         p = subprocess.run(['ssh', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no',
