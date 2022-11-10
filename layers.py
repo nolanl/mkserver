@@ -4,7 +4,7 @@ from util import SHA256Pipe
 
 def tar2sqfs_cmd(tarfile):
     #XXX xz for fast CPUs, lzo (or default gzip) for slow?
-    return ['tar2sqfs', os.path.splitext(tarfile)[0] + '.sqfs']
+    return ['tar2sqfs', '-q', os.path.splitext(tarfile)[0] + '.sqfs']
 
 #Takes a stream in "docker save" format, and extracts it to sqfs (by default) layers
 # in outdir. Metadata is saved as well. putasides allow files matching a regex to
