@@ -30,20 +30,21 @@ insmod /mods/overlay.ko
 # Wait a little for devices to appear.
 sleep 2
 
-ROOTSLOT=`cat /proc/cmdline | egrep -o 'root=[^ ]+' | cut -d'=' -f2`
+ROOTSLOT=$(cat /proc/cmdline | grep -E -o 'root=[^ ]+' | cut -d'=' -f2)
 
 #Try all partitions until one has a slot with a layers file.
-for i in `egrep -o ' (mmcblk[0-9]+p[0-9]+|[shv]d[a-z]+[0-9]+)$' /proc/partitions`; do
+# shellcheck disable=SC2013
+for i in $(grep -E -o ' (mmcblk[0-9]+p[0-9]+|[shv]d[a-z]+[0-9]+)$' /proc/partitions); do
     #XXX Maybe check that it is fat/vfat/exfat before trying to mount?
-    if ! mount /dev/$i /boot -o ro,flush,umask=0077; then
+    if ! mount "/dev/$i" /boot -o ro,flush,umask=0077; then
         continue
     fi
-    if [ -f /boot/$ROOTSLOT/layers ]; then
+    if [ -f "/boot/$ROOTSLOT/layers" ]; then
         break
     fi
     umount /boot
 done
-if ! [ -f /boot/$ROOTSLOT/layers ]; then
+if ! [ -f "/boot/$ROOTSLOT/layers" ]; then
     echo "FAILED TO MOUNT /boot" >&2
     # drop into shell
     setsid -c /bin/sh -l
@@ -54,11 +55,11 @@ fi
 
 # Mount the real root
 LAYERS=
-for layer in `cat /boot/$ROOTSLOT/layers` ../$ROOTSLOT/finalize; do
-    mount -tsquashfs -oro /boot/layers/$layer.sqfs /boot/layers/$layer
+for layer in $(cat "/boot/$ROOTSLOT/layers") "../$ROOTSLOT/finalize"; do
+    mount -tsquashfs -oro "/boot/layers/$layer.sqfs" "/boot/layers/$layer"
     LAYERS=/boot/layers/$layer:$LAYERS
 done
-mount -toverlay overlay -olowerdir=${LAYERS%:} /newroot
+mount -toverlay overlay -olowerdir="${LAYERS%:}" /newroot
 
 # debugging: mount a writable overlay on top of /
 #insmod /mods/overlay.ko
@@ -94,19 +95,19 @@ if grep -q INITSH /newroot/proc/cmdline; then
 fi
 
 # Do we have a CMD override?
-if egrep -q ' cmd_to_eol=.+$' /newroot/proc/cmdline; then
-    CMD=`egrep -o 'cmd_to_eol=.+$' /newroot/proc/cmdline | cut -d'=' -f2-`
+if grep -E -q ' cmd_to_eol=.+$' /newroot/proc/cmdline; then
+    CMD=$(grep -E -o 'cmd_to_eol=.+$' /newroot/proc/cmdline | cut -d'=' -f2-)
 else
-    CMD=`cat /newroot/boot/initcmd.txt`
+    CMD=$(cat /newroot/boot/initcmd.txt)
 fi
 
 # If we don't have a real init, do all the stuff a container image expects here.
-if ! echo "$CMD" | egrep -q '^/sbin/init$'; then
-    chroot /newroot /boot/$ROOTSLOT/bin/mininit
+if ! echo "$CMD" | grep -E -q '^/sbin/init$'; then
+    chroot /newroot "/boot/$ROOTSLOT/bin/mininit"
 fi
 
 echo "initrd finished, switching roots, cmd: $CMD"
-if echo "$CMD" | egrep -q "^/bin/(ba|z|fi)?sh$"; then
+if echo "$CMD" | grep -E -q "^/bin/(ba|z|fi)?sh$"; then
     #XXX try https://www.earth.li/~noodles/blog/2022/04/resizing-consoles-automatically.html
     echo
     echo '#############################################################'
