@@ -24,6 +24,8 @@ def dirs(request):
 
 @pytest.fixture(scope='class')
 def container(dirs):
+    #XXX should be module scope? or better, based on the name of the class?
+    '''Builds a container based on the name of the test file.'''
     print('Building container image', dirs.imagename)
 
     #XXX Keep our own cache to prevent unneeded rebuilds?

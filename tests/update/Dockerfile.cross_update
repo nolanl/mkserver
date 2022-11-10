@@ -1,0 +1,5 @@
+FROM mks_raspi
+
+RUN touch /cross
+
+CMD ["/bin/bash"]
