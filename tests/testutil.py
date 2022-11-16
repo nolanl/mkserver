@@ -4,6 +4,7 @@ from qemu import Qemu
 for runtime in ('podman', 'docker'):
     if shutil.which(runtime):
         CRUNTIME = runtime
+CRUNTIME = 'docker' #XXX Test/fix podman build, then remove this override.
 PLATFORM = 'arm64' #XXX
 
 def build_container(dockerpath, dockerfile, tag):

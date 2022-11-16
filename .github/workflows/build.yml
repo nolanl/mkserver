@@ -1,0 +1,36 @@
+name: mkserver build lint test
+
+env:
+  #github's ubuntu has an old shellcheck which emits spurious warnings.
+  SHELLCHECK_OPTS: '--exclude=SC2230'
+
+on:
+  push:
+  schedule:
+    - cron: '18 8 10 * *' #8:18 UTC on the 10th of every month.
+
+jobs:
+  rp-build-lint-test:
+    runs-on: ubuntu-22.04 #XXX Back to -latest when GH upgrades to 22.04.
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install required deps
+        run: |
+          sudo apt update
+          sudo apt -y install pyflakes3 \
+#              binfmt-support qemu-user-static \
+#              python3-psutil \
+#              squashfs-tools-ng u-boot-tools xorriso \
+#              python3-pytest
+#          wget http://sigbus.net/nbdkit -O /tmp/nbdkit
+#          chmod a+x /tmp/nbdkit
+      - name: Lint scripts
+        run: make check
+#XXX Tests on GH run for over an hour building containers and building images without
+#    completing, much less actually starting the tests. Perhaps we run afoul of some
+#    CPU limiters or cryptocurrency mining limiters or something?
+#      - name: Run tests
+#        env:
+#          DEBUG: '1' #XXX Remove once ssh host keys are persisted.
+#          NBDKIT: '/tmp/nbdkit' #XXX Remove once ubuntu-latest has >=1.27.2
+#        run: make test
