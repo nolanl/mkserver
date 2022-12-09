@@ -18,6 +18,10 @@ dd_file() {
     fi
 }
 
+log() {
+    echo "__LOG__ $*"
+}
+
 CURSLOT=$(cat /proc/cmdline | grep -E -o 'root=[^ ]+' | cut -d'=' -f2)
 NEWSLOT=$(echo "$CURSLOT" | tr ab ba)
 
@@ -48,7 +52,6 @@ while read -r arg1 arg2 arg3; do
         if [ "$BOOTSLOT_CLEARED" != true ]; then
             BOOTSLOT_CLEARED=true
             rm -rf "/boot/${NEWSLOT:?}"
-            mkdir -p "/boot/$NEWSLOT/finalize"
         fi
 
         filename="/boot/$NEWSLOT/$arg2"
@@ -58,10 +61,11 @@ while read -r arg1 arg2 arg3; do
     elif [ "$arg1" = 'FINALIZE' ]; then
         cp "/boot/$NEWSLOT/slotcfg.scr" /boot/
 
-        curlayers=$(cat /boot/slot*/layers | sort | uniq)
+        #GC unused layers.
+        usedlayers="$(cat /boot/slot*/layers | sort | uniq | tr '\n' ' ') identity user_identity"
         for layer in /boot/layers/*.sqfs; do
             layer=$(basename "$layer" .sqfs)
-            if ! echo "$curlayers" | grep -q "$layer"; then
+            if ! echo " $usedlayers " | grep -q " $layer "; then
                 rmdir "/boot/layers/$layer"
                 rm "/boot/layers/$layer.sqfs"
             fi

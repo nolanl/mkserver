@@ -32,6 +32,7 @@ class TestUpdate:
         layers = [os.path.splitext(os.path.basename(i))[0] for i in ret[1].decode().split()]
         ret = runvm.ssh('cat', '/boot/slot*/layers')
         reflayers = set(ret[1].decode().split())
+        reflayers.update(('identity', 'user_identity'))
         for i in reflayers:
             layers.remove(i)
         assert(len(layers) == 0)

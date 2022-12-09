@@ -1,4 +1,4 @@
-import subprocess, os, shutil
+import subprocess, os, shutil, sys
 import util
 
 def send_file(cmd, srcdir, filename, fout):
@@ -8,6 +8,14 @@ def send_file(cmd, srcdir, filename, fout):
     with open(fullfilename, 'rb') as f:
         shutil.copyfileobj(f, fout)
     fout.flush()
+
+def readline(stdout):
+    while True:
+        ret = stdout.readline()
+        if ret.startswith(b'__LOG__ '):
+            print("RLOG", ret[8:].decode(), file=sys.stderr)
+        else:
+            return ret
 
 def update_host(slotdir, layersdir, host, port):
     if 'DEBUG' in os.environ:
@@ -23,13 +31,13 @@ def update_host(slotdir, layersdir, host, port):
     stdin, stdout = ssh.stdin, ssh.stdout
 
     #Get current/new slot
-    curslot, newslot = stdout.readline().split()
+    curslot, newslot = readline(stdout).split()
     print('Installing into slot', newslot.decode())
 
     #Get list of current layers
     cur_layers = []
     while True:
-        layer = stdout.readline()
+        layer = readline(stdout)
         if layer == b'__ENDLAYERS__\n':
             break
         cur_layers.append(layer[:-1].decode())
@@ -41,7 +49,7 @@ def update_host(slotdir, layersdir, host, port):
     for layer in new_layers:
         print('Uploading layer', layer)
         send_file(b'PUTLAYER', layersdir, '%s.sqfs' % layer, stdin)
-        ret = stdout.readline()
+        ret = readline(stdout)
         if ret != b'OK\n':
             raise Exception('Failed to PUTLAYER layer %s: %s' % (layer, ret))
 
@@ -55,14 +63,14 @@ def update_host(slotdir, layersdir, host, port):
         relfname = fname[len(slotdir)+1:]
         print('Uploading slot file', relfname)
         send_file(b'PUTBOOTSLOT', slotdir, relfname, stdin)
-        ret = stdout.readline()
+        ret = readline(stdout)
         if ret != b'OK\n':
             raise Exception("Failed to PUTBOOTSLOT file %s: %s" % (fname, ret))
 
     #Finalize and cleanup
     stdin.write(b'FINALIZE\n')
     stdin.flush()
-    ret = stdout.readline()
+    ret = readline(stdout)
     if ret != b'OK\n':
         raise Exception('Failed to FINALIZE: %s' % ret)
 

@@ -133,17 +133,20 @@ initramfs = Initramfs(busybox_url, os.path.join(datadir, 'init'))
 initramfs.copyin(glob.glob(os.path.join(modtempdir.name, '*')), 'mods')
 initramfs.write_cpiofile(os.path.join(slotdir, 'initrd.img-%s' % kernelver))
 
-#Generate a finalize/keys/config layer
+#Generate a machine identity layer
 with open(os.path.join(datadir, 'hosts'), 'r') as f:
     hosts = Template(f.read()).substitute(hostname=hostname, domain=domain)
-finalize = {
+identity = {
     'etc/hostname': (hostname + '\n', stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
     'etc/hosts': (hosts, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
     'etc/mtab': ('SYMLINK:/proc/mounts', 0),
     'etc/machine-id': (secrets.token_hex(16) + '\n', stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
 }
-#XXX Clobber ssh host keys, if present. /etc/machine-id. /var/lib/systemd/random-seed? Actually need to persist these!
+identity_layer = os.path.join(layersdir, 'identity')
+dict_to_layer(identity, identity_layer)
+os.makedirs(identity_layer, exist_ok=True)
 
+#Generate a user identity layer
 if not args.no_sshkey:
     keyfiles = ('id_ed25519.pub', 'id_rsa.pub')
     keyfiles = [ os.path.expanduser(os.path.join('~', '.ssh', x)) for x in keyfiles ]
@@ -152,11 +155,10 @@ if not args.no_sshkey:
         if os.path.exists(key):
             with open(key, 'r') as kf:
                 authkeys.append(kf.read().strip())
-    finalize['root/.ssh/authorized_keys'] = ('\n'.join(authkeys) + '\n', stat.S_IRUSR | stat.S_IWUSR)
-
-finalize_layer = os.path.join(slotdir, 'finalize')
-dict_to_layer(finalize, finalize_layer)
-os.makedirs(finalize_layer, exist_ok=True)
+    user_identity = {'root/.ssh/authorized_keys': ('\n'.join(authkeys) + '\n', stat.S_IRUSR | stat.S_IWUSR)}
+    user_identity_layer = os.path.join(layersdir, 'user_identity')
+    dict_to_layer(user_identity, user_identity_layer)
+    os.makedirs(user_identity_layer, exist_ok=True)
 
 #Copy our scripts into the slotdir's bin/
 slotbin = os.path.join(slotdir, 'bin')

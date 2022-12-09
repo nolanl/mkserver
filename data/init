@@ -55,7 +55,7 @@ fi
 
 # Mount the real root
 LAYERS=
-for layer in $(cat "/boot/$ROOTSLOT/layers") "../$ROOTSLOT/finalize"; do
+for layer in $(cat "/boot/$ROOTSLOT/layers") "identity" "user_identity"; do
     mount -tsquashfs -oro "/boot/layers/$layer.sqfs" "/boot/layers/$layer"
     LAYERS=/boot/layers/$layer:$LAYERS
 done
