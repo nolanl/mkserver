@@ -54,6 +54,13 @@ def imgdir(dirs, container):
 
 @pytest.fixture(scope='class')
 def runvm(dirs, imgdir):
+    known_hosts = dirs.testoutputdir + '/known_hosts'
+    try:
+        os.remove(known_hosts)
+    except FileNotFoundError:
+        pass
+    os.environ['EXTRASSHARGS'] = '-F none -o UserKnownHostsFile=%s -o StrictHostKeyChecking=accept-new' % known_hosts
+
     vm = run_vm(imgdir,
                 confile=dirs.testoutputdir + '/' + dirs.testname + '.console',
                 monsock=dirs.testoutputdir + '/' + dirs.testname + '.monsock')

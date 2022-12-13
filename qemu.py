@@ -88,7 +88,10 @@ class Qemu:
             time.sleep(0.1)
 
     def ssh(self, *cmd):
-        p = subprocess.run(['ssh', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no',
+        extra_ssh_args = os.environ.get('EXTRASSHARGS', '').split()
+        if len(extra_ssh_args) == 0:
+            extra_ssh_args = [ '-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no' ]
+        p = subprocess.run(['ssh', *extra_ssh_args,
                             'root@localhost', '-p', '22222', *cmd], capture_output=True)
         return (p.returncode, p.stdout, p.stderr)
 

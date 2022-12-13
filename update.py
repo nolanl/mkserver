@@ -18,10 +18,7 @@ def readline(stdout):
             return ret
 
 def update_host(slotdir, layersdir, host, port):
-    if 'DEBUG' in os.environ:
-        extra_ssh_args = ['-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no']
-    else:
-        extra_ssh_args = []
+    extra_ssh_args = os.environ.get('EXTRASSHARGS', '').split()
 
     #XXX Does update belong in a per-slot bin dir? Seems unhelpful vs just /boot/bin/.
     #XXX Related, we need a way to update uboot and other stuff in /boot/.
