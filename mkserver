@@ -3,6 +3,7 @@ import argparse, sys, os, shutil, glob, contextlib, tempfile, socket, stat, secr
 from string import Template
 
 import util
+from ssh import gen_host_keys
 from deb import extract_files_from_deb_url
 from initramfs import Initramfs
 from layers import ContainerStream, dict_to_layer
@@ -99,6 +100,7 @@ putasides = [
     ('^usr/lib/linux-image-[^/]+/broadcom/.+', (slotdir, False)),
     ('^run/.+', ('', True)),
     ('^usr/sbin/policy-rc.d', ('', True)), #Debian/Ubuntu container images have this, we remove it.
+    ('^etc/ssh/ssh_host_.+_key', ('', True)), #These get handled in the identity layer.
 ]
 for mod in mods:
     putasides.append(('^lib/modules/[^/]+/%s' % mod, (modtempdir.name, False)))
@@ -136,12 +138,17 @@ initramfs.write_cpiofile(os.path.join(slotdir, 'initrd.img-%s' % kernelver))
 #Generate a machine identity layer
 with open(os.path.join(datadir, 'hosts'), 'r') as f:
     hosts = Template(f.read()).substitute(hostname=hostname, domain=domain)
+pubhostkey, privhostkey = gen_host_keys()
 identity = {
     'etc/hostname': (hostname + '\n', stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
     'etc/hosts': (hosts, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
     'etc/mtab': ('SYMLINK:/proc/mounts', 0),
     'etc/machine-id': (secrets.token_hex(16) + '\n', stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
+    'etc/ssh/ssh_host_ed25519_key': (privhostkey, stat.S_IRUSR | stat.S_IWUSR),
+    'etc/ssh/ssh_host_ed25519_key.pub': (pubhostkey, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH),
 }
+#XXX What about /var/lib/dbus/machine-id when it exists? Symlink to /etc/machine-id?
+#XXX /var/lib/systemd/random-seed? Can we just make sure it doesn't exist?
 identity_layer = os.path.join(layersdir, 'identity')
 dict_to_layer(identity, identity_layer)
 os.makedirs(identity_layer, exist_ok=True)
