@@ -28,7 +28,7 @@ insmod /mods/squashfs.ko
 insmod /mods/overlay.ko
 
 # Wait a little for devices to appear.
-sleep 2
+sleep 2 #XXX keep trying to mount the boot partition until it works?
 
 ROOTSLOT=$(cat /proc/cmdline | grep -E -o 'root=[^ ]+' | cut -d'=' -f2)
 
