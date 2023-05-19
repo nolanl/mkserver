@@ -9,6 +9,9 @@ def _recent_version(program, needmajor, needminor, needpatch):
     return major > needmajor or (major == needmajor and minor > needminor) or \
         (major == needmajor and minor == needminor and patch >= needpatch)
 
+class OldDependency(Exception):
+    pass
+
 class Qemu:
     def __init__(self, imgdir, cmd=None):
         self.imgdir = imgdir
@@ -56,6 +59,7 @@ class Qemu:
         if not recent_qemu:
             print('WARNING: Your qemu is too old to support soft rebooting rapsberry'
                   ' pis, so mkserver --update will not work. You need 6.1.0 or newer', file=sys.stderr)
+            raise OldDependency("qemu")
         if recent_nbdkit:
             args = [self.nbdkit, '-U', '-', '--filter=cow',
                     'floppy', 'dir=%s' % self.imgdir, 'size=%s' % size,
@@ -66,6 +70,7 @@ class Qemu:
             args = [self.nbdkit, '-U', '-', '--filter=truncate', '--filter=cow',
                     'floppy', 'dir=%s' % self.imgdir, 'truncate=%s' % size,
                     '--run', qemu_args]
+            raise OldDependency("nbdkit")
 
         return args
 
